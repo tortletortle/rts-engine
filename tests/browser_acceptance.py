@@ -1,0 +1,35 @@
+from playwright.sync_api import sync_playwright
+import json, os
+ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+html=open(os.path.join(ROOT,'index.html'),encoding='utf-8').read()
+with sync_playwright() as p:
+    browser=p.chromium.launch(headless=True, executable_path='/usr/bin/chromium', args=['--no-sandbox','--disable-dev-shm-usage'])
+    page=browser.new_page(viewport={'width':1440,'height':1000}, device_scale_factor=1)
+    errors=[]
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    page.on('console', lambda msg: errors.append('console:'+msg.text) if msg.type=='error' else None)
+    page.set_content(html, wait_until='load', timeout=30000)
+    page.wait_for_timeout(500)
+    initial=page.evaluate("({title:document.title,heading:document.querySelector('h1')?.textContent,scale:document.querySelector('#scale')?.value,units:a.units.length,air:a.audit().airUnits,ground:a.audit().groundUnits,overlaps:a.audit().overlaps,canvas:!!document.querySelector('#c'),statsReady:!!document.querySelector('#stats').textContent})")
+    page.select_option('#scale','1000')
+    page.click('#reset')
+    page.wait_for_timeout(300)
+    scale1000=page.evaluate("({units:a.units.length,air:a.audit().airUnits,ground:a.audit().groundUnits,overlaps:a.audit().overlaps,plannerTicks:a.audit().ticks,combatChecks:a.combatChecks,statsReady:!!document.querySelector('#stats').textContent,stats:document.querySelector('#stats').textContent.slice(0,300)})")
+    page.evaluate("window.__initialPositions=a.units.map(u=>[u.id,u.x,u.y]);window.__frames=0;let __fpsStart=performance.now();(function __fpsLoop(){window.__frames++;if(performance.now()-__fpsStart<1000)requestAnimationFrame(__fpsLoop);else window.__fps=window.__frames})()")
+    page.click('#play')
+    page.wait_for_timeout(2500)
+    page.click('#play')
+    after_run=page.evaluate("({time:a.t,alive:a.units.filter(u=>!u.dead).length,plannerTicks:a.audit().ticks,overlaps:a.audit().overlaps,combatChecks:a.combatChecks,aiMoved:a.units.filter(u=>u.side===1).some(u=>{const b=window.__initialPositions[u.id];return Math.hypot(u.x-b[1],u.y-b[2])>2}),fps:window.__fps||null})")
+    # Verify mouse selection and right-click movement order.
+    unit=page.evaluate("(()=>{const u=a.units.find(u=>u.side===0&&!u.dead);const r=c.getBoundingClientRect();return {id:u.id,x:r.left+u.x/1200*r.width,y:r.top+u.y/800*r.height,oldGoal:u.goal}})()")
+    page.mouse.click(unit['x'],unit['y'])
+    selected=page.evaluate("a.selected.size")
+    rect=page.evaluate("(()=>{const r=c.getBoundingClientRect();return {x:r.left+500/1200*r.width,y:r.top+400/800*r.height}})()")
+    page.mouse.click(rect['x'],rect['y'],button='right')
+    pending=page.evaluate("!!a.pending")
+    for _ in range(6): page.click('#step')
+    moved_goal=page.evaluate(f"a.units.find(u=>u.id==={unit['id']}).goal")
+    control_test={'selectedCount':selected,'rightClickCreatedOrder':pending,'goalChanged':moved_goal!=unit['oldGoal']}
+    page.screenshot(path=os.path.join(ROOT,'artifacts','browser-acceptance.png'), full_page=True)
+    print(json.dumps({'initial':initial,'scale1000':scale1000,'afterRun':after_run,'controlTest':control_test,'errors':errors},ensure_ascii=False,indent=2))
+    browser.close()

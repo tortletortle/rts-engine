@@ -1,0 +1,142 @@
+[
+  {
+    "n": 24,
+    "simSeconds": 86.3,
+    "winner": 1,
+    "reason": "战略积分",
+    "points": [
+      [
+        "A",
+        1
+      ],
+      [
+        "B",
+        null
+      ],
+      [
+        "C",
+        1
+      ],
+      [
+        "D",
+        1
+      ],
+      [
+        "E",
+        1
+      ]
+    ],
+    "vp": [
+      0,
+      240
+    ],
+    "overlaps": 0,
+    "alive": 44,
+    "wallMs": 575.9
+  },
+  {
+    "n": 200,
+    "simSeconds": 84.7,
+    "winner": 1,
+    "reason": "战略积分",
+    "points": [
+      [
+        "A",
+        1
+      ],
+      [
+        "B",
+        null
+      ],
+      [
+        "C",
+        1
+      ],
+      [
+        "D",
+        1
+      ],
+      [
+        "E",
+        1
+      ]
+    ],
+    "vp": [
+      0,
+      240
+    ],
+    "overlaps": 0,
+    "alive": 189,
+    "wallMs": 2340.2
+  },
+  {
+    "n": 500,
+    "simSeconds": 30,
+    "winner": null,
+    "reason": null,
+    "points": [
+      [
+        "A",
+        null
+      ],
+      [
+        "B",
+        null
+      ],
+      [
+        "C",
+        1
+      ],
+      [
+        "D",
+        1
+      ],
+      [
+        "E",
+        1
+      ]
+    ],
+    "vp": [
+      0,
+      58.7
+    ],
+    "overlaps": 0,
+    "alive": 493,
+    "wallMs": 2327
+  },
+  {
+    "n": 1000,
+    "simSeconds": 15,
+    "winner": null,
+    "reason": null,
+    "points": [
+      [
+        "A",
+        0
+      ],
+      [
+        "B",
+        null
+      ],
+      [
+        "C",
+        null
+      ],
+      [
+        "D",
+        1
+      ],
+      [
+        "E",
+        1
+      ]
+    ],
+    "vp": [
+      14.4,
+      19.2
+    ],
+    "overlaps": 0,
+    "alive": 1000,
+    "wallMs": 2396.4
+  }
+]

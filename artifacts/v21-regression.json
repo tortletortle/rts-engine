@@ -1,0 +1,109 @@
+[
+  {
+    "name": "V2.1 basic strategy initialization",
+    "status": "PASS",
+    "ms": 56.4,
+    "detail": {
+      "units": 24,
+      "air": 3,
+      "ground": 21,
+      "buildings": 6
+    }
+  },
+  {
+    "name": "500-unit scale and base-area deployment",
+    "status": "PASS",
+    "ms": 418.3,
+    "detail": {
+      "units": 500,
+      "side0AverageDistanceToHQ": 137.6,
+      "side1AverageDistanceToHQ": 139.9,
+      "overlaps": 0
+    }
+  },
+  {
+    "name": "aircraft can be produced from an airfield",
+    "status": "PASS",
+    "ms": 104.2,
+    "detail": {
+      "id": 24,
+      "layer": "air",
+      "speed": 34,
+      "units": 25
+    }
+  },
+  {
+    "name": "air navigation bypasses blocked terrain",
+    "status": "PASS",
+    "ms": 5.4,
+    "detail": {
+      "groundBlocked": true,
+      "airTraversable": true
+    }
+  },
+  {
+    "name": "air and ground may occupy the same x-y cell on separate layers",
+    "status": "PASS",
+    "ms": 16,
+    "detail": {
+      "layers": [
+        "ground",
+        "air"
+      ],
+      "sameCell": 4860
+    }
+  },
+  {
+    "name": "unit movement speeds are differentiated",
+    "status": "PASS",
+    "ms": 3.5,
+    "detail": {
+      "heavyPx": 60,
+      "uavPx": 190,
+      "speedHeavy": 12,
+      "speedUav": 38
+    }
+  },
+  {
+    "name": "air-defense counter table",
+    "status": "PASS",
+    "ms": 0.1,
+    "detail": {
+      "aaVsHelicopter": 171,
+      "cannonVsAircraft": 0,
+      "atMissileVsHeavy": 206.99999999999997
+    }
+  },
+  {
+    "name": "200-unit regression and movement",
+    "status": "PASS",
+    "ms": 215.5,
+    "detail": {
+      "alive": 200,
+      "air": 28,
+      "ground": 172,
+      "overlaps": 0,
+      "plannerTicks": 15,
+      "meanDecisionMs": 0.263,
+      "combatChecks": 160920
+    }
+  },
+  {
+    "name": "1000-unit sustained battle, AI order and spatial combat index",
+    "status": "PASS",
+    "ms": 1622.6,
+    "detail": {
+      "units": 1000,
+      "air": 142,
+      "ground": 858,
+      "overlaps": 0,
+      "plannerTicks": 24,
+      "simulatedSeconds": 5,
+      "side1Moved": true,
+      "combatQueries": 192900,
+      "combatChecks": 3549261,
+      "runMs": 983.3,
+      "initMs": 250
+    }
+  }
+]

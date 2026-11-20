@@ -1,0 +1,143 @@
+[
+  {
+    "name": "five neutral points, no initial bonus",
+    "status": "PASS",
+    "detail": {
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "income": 15
+    },
+    "ms": 31.9
+  },
+  {
+    "name": "ground unit captures and yields resources / VP; empty ownership persists",
+    "status": "PASS",
+    "detail": {
+      "owner": 0,
+      "resourceIncome": 23,
+      "vp": 2.3499999999999996
+    },
+    "ms": 21
+  },
+  {
+    "name": "air-only presence cannot capture",
+    "status": "PASS",
+    "ms": 22.7
+  },
+  {
+    "name": "contested zone pauses progress, score and bonus income",
+    "status": "PASS",
+    "ms": 26.3
+  },
+  {
+    "name": "enemy capture neutralizes before ownership changes",
+    "status": "PASS",
+    "detail": {
+      "changes": [
+        [
+          null,
+          0
+        ],
+        [
+          0,
+          null
+        ],
+        [
+          null,
+          1
+        ]
+      ]
+    },
+    "ms": 20.1
+  },
+  {
+    "name": "dead units and remote units do not count",
+    "status": "PASS",
+    "ms": 20.8
+  },
+  {
+    "name": "score victory and draw rules stop simulation",
+    "status": "PASS",
+    "ms": 35.5
+  },
+  {
+    "name": "HQ destruction remains a win condition",
+    "status": "PASS",
+    "ms": 14.3
+  },
+  {
+    "name": "AI and player orders coexist; three separate groups",
+    "status": "PASS",
+    "detail": {
+      "aiPlan": [
+        {
+          "squad": 0,
+          "point": "D",
+          "units": 4
+        },
+        {
+          "squad": 1,
+          "point": "E",
+          "units": 4
+        },
+        {
+          "squad": 2,
+          "point": "C",
+          "units": 4
+        }
+      ]
+    },
+    "ms": 32.5
+  },
+  {
+    "name": "AI reaches and captures objectives in live 24-unit battle",
+    "status": "PASS",
+    "detail": {
+      "time": 49.9999999999993,
+      "points": [
+        {
+          "id": "A",
+          "owner": 1,
+          "contested": false
+        },
+        {
+          "id": "B",
+          "owner": null,
+          "contested": false
+        },
+        {
+          "id": "C",
+          "owner": 1,
+          "contested": false
+        },
+        {
+          "id": "D",
+          "owner": 1,
+          "contested": false
+        },
+        {
+          "id": "E",
+          "owner": 1,
+          "contested": false
+        }
+      ],
+      "vp": [
+        0,
+        94.59999999999677
+      ],
+      "collisions": 0,
+      "alive": 34
+    },
+    "ms": 344.8
+  },
+  {
+    "name": "spawn avoids current and reserved next cells",
+    "status": "PASS",
+    "ms": 14.4
+  }
+]

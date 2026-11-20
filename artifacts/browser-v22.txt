@@ -1,0 +1,51 @@
+{
+  "initial": {
+    "title": "钢铁战线 V2.2",
+    "points": 5,
+    "units": 200,
+    "rows": 5,
+    "score": "友军 · 胜利积分\n0 / 240\n敌军 · 胜利积分\n0 / 240\n友军收入 / 秒\n+15"
+  },
+  "tactical": {
+    "time": 25.00000000000022,
+    "owner": 0,
+    "pointStates": [
+      [
+        "A",
+        0
+      ],
+      [
+        "B",
+        null
+      ],
+      [
+        "C",
+        1
+      ],
+      [
+        "D",
+        1
+      ],
+      [
+        "E",
+        1
+      ]
+    ],
+    "vp": [
+      12.30000000000004,
+      18.850000000000133
+    ],
+    "overlaps": 0,
+    "score": "友军 · 胜利积分\n12 / 240\n敌军 · 胜利积分\n18 / 240\n友军收入 / 秒\n+23"
+  },
+  "scale1000": {
+    "time": 6.699999999999984,
+    "units": 1000,
+    "air": 142,
+    "overlaps": 0,
+    "points": 5
+  },
+  "errors": [],
+  "checks": "PASS"
+}
+MOBILE {"width": 390, "scrollWidth": 390, "points": 5}

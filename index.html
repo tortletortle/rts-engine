@@ -1,0 +1,202 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>钢铁战线 V2.2</title><style>*{box-sizing:border-box}body{margin:0;background:#101a1c;color:#e5eee5;font:14px system-ui}header{padding:16px 22px;border-bottom:1px solid #35453f;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}h1{margin:0;font-size:23px}small{color:#9eafa4}main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;padding:14px}section,aside{background:#192824;border:1px solid #35483e;padding:12px;border-radius:8px}canvas{width:100%;display:block;touch-action:none}#c{background:#263e36}button,select{background:#293c34;color:#e5eee5;border:1px solid #49604e;border-radius:5px;padding:8px;margin:3px;cursor:pointer}button:hover{background:#46664d}#orders,#troops{display:grid;grid-template-columns:1fr 1fr}#notice{grid-column:span 2;color:#b4c9a9}h3{font-size:13px;color:#a8c4af;margin:12px 0 6px}pre{font-size:12px;white-space:pre-wrap}p{color:#a8baa9;font-size:12px}#mini{max-width:240px}@media(max-width:800px){main{grid-template-columns:1fr}}#territory{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:#13221e;border:1px solid #486156;border-radius:6px;padding:10px 12px;margin-bottom:12px}.score{flex:1;min-width:120px}.score b{font-size:20px}.score-track{height:5px;background:#35463e;border-radius:4px;overflow:hidden;margin-top:5px}.score-track i{display:block;height:100%;transition:width .15s}.point-row{display:grid;grid-template-columns:1fr auto;gap:4px;padding:8px 0;border-bottom:1px solid #35483e;font-size:12px}.point-row small{grid-column:1/-1}.point-row button{margin:0;padding:4px 7px;font-size:12px}#pointlist{margin-bottom:12px}#result{color:#f2d58c;font-weight:700}#stats{max-height:180px;overflow:auto}#mission{margin:0 0 8px}#c{border-radius:4px}button:focus-visible,select:focus-visible{outline:2px solid #65d4b0}</style><header><div><small>STEEL FRONT / TERRITORY CONTROL</small><h1>钢铁战线 V2.2</h1></div><div id="economy"></div><div><label>战场规模 <select id="scale"><option value="24">24 · 快速测试</option><option value="200" selected>200 · 标准战场</option><option value="500">500 · 大规模</option><option value="1000">1000 · 千单位</option></select></label><label>速度 <select id="speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label><button id="reset">新战局</button><button id="play">开始 / 暂停</button><button id="step">单步</button></div></header><main><section><div id="territory" aria-live="polite"></div><p id="mission">地面部队占领 5 个战略点，控制期间持续获得资源和胜利分；先到 240 分或摧毁敌军总部即胜利。</p><canvas id="c" width="1200" height="800"></canvas><p>框选友军；右键或选中后点击下达移动指令。Ctrl+1–9 保存编队，数字键召回，空格暂停。空军不能占点。双方地面部队同时在圈内时，占领进度及收益暂停。点击战略点列表可指挥已选部队。</p><label>阵型 <select id="formation"><option value="block">方阵</option><option value="line">纵向战列</option><option value="column">横向行列</option></select></label></section><aside><h3>战场态势</h3><canvas id="mini" width="240" height="160"></canvas><h3>战略点 / 指挥</h3><div id="pointlist"></div><h3>战场数据</h3><pre id="stats"></pre><h3>基地建设 / 科技</h3><div id="orders"></div><h3>兵种生产</h3><div id="troops"></div></aside></main><script>(function(root){
+class Arena{constructor(n=200){this.w=1200;this.h=800;this.r=3;this.dt=.05;this.cell=12;this.units=[];this.obstacles=[{x:570,y:0,w:60,h:300},{x:570,y:500,w:60,h:300}];this.t=0;this.checks=0;this.rejected=0;let cols=Math.ceil(Math.sqrt(n/2));for(let i=0;i<n;i++){let j=Math.floor(i/2),side=i%2,x=side?1100-j%cols*9:100+j%cols*9,y=310+Math.floor(j/cols)*9;this.units.push({id:i,x,y,a:side?Math.PI:0,v:0,gx:side?100:1100,gy:y,side,done:false})}this.grid=new Map;for(const u of this.units)this.add(u)}
+key(x,y){return Math.floor(x/this.cell)+','+Math.floor(y/this.cell)} add(u){let k=this.key(u.x,u.y);if(!this.grid.has(k))this.grid.set(k,new Set);this.grid.get(k).add(u)} remove(u){this.grid.get(this.key(u.x,u.y)).delete(u)}
+near(x,y){let a=[];for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){let s=this.grid.get((Math.floor(x/this.cell)+i)+','+(Math.floor(y/this.cell)+j));if(s)a.push(...s)}return a}
+clear(u,x,y){if(x<3||x>1197||y<3||y>797)return false;for(const o of this.obstacles)if(x>o.x-3&&x<o.x+o.w+3&&y>o.y-3&&y<o.y+o.h+3)return false;for(const q of this.near(x,y)){if(q===u)continue;this.checks++;if((q.layer||'ground')===(u.layer||'ground')&&(q.x-x)**2+(q.y-y)**2<36-1e-8)return false}return true}
+step(){for(let k=0;k<this.units.length;k++){let u=this.units[(k+Math.floor(this.t/this.dt))%this.units.length];if(u.done)continue;let dx=u.gx-u.x,dy=u.gy-u.y;if(Math.hypot(dx,dy)<7){u.done=true;u.v=0;continue}let target=Math.atan2(dy,dx);let candidates=[0,.4,-.4,.8,-.8,1.2,-1.2];let moved=false;for(let off of candidates){let a=target+off,d=Math.atan2(Math.sin(a-u.a),Math.cos(a-u.a));a=u.a+Math.max(-.25,Math.min(.25,d));let v=Math.min(24,u.v+2),x=u.x+Math.cos(a)*v*this.dt,y=u.y+Math.sin(a)*v*this.dt;if(this.clear(u,x,y)){this.remove(u);Object.assign(u,{x,y,a,v});this.add(u);moved=true;break}}if(!moved){u.v=0;u.a+=u.side?.15:-.15;this.rejected++}}this.t+=this.dt}
+audit(){let overlaps=0;for(const u of this.units)if(!u.dead)for(const q of this.near(u.x,u.y))if(!q.dead&&q.id>u.id&&(q.layer||'ground')===(u.layer||'ground')&&Math.hypot(q.x-u.x,q.y-u.y)<6-1e-7)overlaps++;return {n:this.units.length,arrived:this.units.filter(u=>u.done).length,overlaps,checks:this.checks,rejected:this.rejected,time:this.t}}
+}if(typeof module!=='undefined')module.exports=Arena;else root.Arena=Arena})(globalThis);
+
+const Base=typeof module!=='undefined'?require('./baseline'):globalThis.Arena;
+class Formation extends Base{
+constructor(n=200,{seed=37,width=180,ratio=.65,mode='formation'}={}){super(n);this.grid.clear();this.mode=mode;this.width=width;this.phase='cross';let top=(800-width)/2;this.obstacles=[{x:570,y:0,w:60,h:top},{x:570,y:top+width,w:60,h:800-top-width}];let rnd=()=>((seed=Math.imul(seed,1664525)+1013904223|0)>>>0)/4294967296;let total=Math.floor(width/10),split=Math.max(1,Math.min(total-1,Math.round(total*ratio)));this.lanes=[split,total-split];let groups=[[],[]];for(let u of this.units){let side=+(u.id>=Math.round(n*ratio));Object.assign(u,{side,done:false,v:0,a:side?Math.PI:0});groups[side].push(u)}for(let side=0;side<2;side++){let g=groups[side],L=this.lanes[side],cols=Math.ceil(Math.sqrt(g.length));for(let j=0;j<g.length;j++){let u=g[j];u.x=(side?930:80)+(j%cols)*10+rnd()*2;u.y=65+Math.floor(j/cols)*10+rnd()*2;this.add(u)}g.sort((a,b)=>a.y-b.y||a.x-b.x);for(let j=0;j<g.length;j++){let u=g[j],lane=j%L,row=Math.floor(j/L),y=top+5+10*(lane+(side?split:0));u.lane=lane;u.entryY=y;u.gx=side?20+row*10:1180-row*10;u.gy=y;u.finalX=side?30+(j%cols)*10:900+(j%cols)*10;u.finalY=420+Math.floor(j/cols)*10;u.stage=0;u.rank=j;}}this.groups=groups;this.arrivals=[];}
+move(u,x,y){let dx=x-u.x,dy=y-u.y,d=Math.hypot(dx,dy);if(d<1e-7)return true;let s=Math.min(d,24*this.dt),nx=u.x+dx/d*s,ny=u.y+dy/d*s;if(this.clear(u,nx,ny)){this.remove(u);Object.assign(u,{x:nx,y:ny,a:Math.atan2(dy,dx)});this.add(u);}else this.rejected++;return false;}
+step(){if(this.mode==='local'){Base.prototype.step.call(this);return;}for(let g of this.groups){for(let u of g){if(u.done)continue;let side=u.side,edge=side?660:540;let targets=[[u.x,u.entryY],[edge,u.entryY],[u.gx,u.gy]];if(u.stage===0){ // move toward staging lane with collision-aware side steps
+let x=u.x,y=u.entryY;if(this.move(u,x,y))u.stage++;else if(!this.clear(u,x,u.y+Math.sign(y-u.y)*Math.min(1.2,Math.abs(y-u.y))))this.move(u,u.x+(side?-12:12),u.y);
+}else if(u.stage===1){if(this.move(u,edge,u.entryY))u.stage++;}else if(this.move(u,u.gx,u.gy)){u.done=true;this.arrivals.push(this.t);}}}this.t+=this.dt;}
+}
+if(typeof module!=='undefined')module.exports=Formation;else globalThis.Formation=Formation;
+
+const F15=typeof module!=='undefined'?require('./formation'):globalThis.Formation;
+class Mapf extends F15{
+constructor(n,opt={}){super(n,opt);this.W=120;this.H=80;this.tickDuration=10/24;this.failures=0;this.build();}
+build(){let t=performance.now(),W=this.W,H=this.H,C=W*H,limit=300;let blocked=new Uint8Array(C);for(let p=0;p<C;p++){let x=p%W*10+5,y=(p/W|0)*10+5;blocked[p]=this.obstacles.some(o=>x>o.x-3&&x<o.x+o.w+3&&y>o.y-3&&y<o.y+o.h+3);}
+this.grid.clear();let occ=new Set();for(let u of this.units){u.start=(u.y/10|0)*W+(u.x/10|0);u.x=u.start%W*10+5;u.y=(u.start/W|0)*10+5;this.add(u);occ.add(u.start);}for(let side=0;side<2;side++){let g=this.groups[side],cols=Math.ceil(Math.sqrt(g.length));g.forEach((u,j)=>{u.goal=(42+(j/cols|0))*W+(side?4:90)+j%cols;u.gx=u.goal%W*10+5;u.gy=(u.goal/W|0)*10+5;});}
+let res=new Set(),edge=new Set(),endAt=new Map(),last=new Map();let order=this.units.slice().sort((a,b)=>Math.abs(a.x-600)-Math.abs(b.x-600)||a.y-b.y);for(let u of order){occ.delete(u.start);let seen=new Map(),heap=[];let h=p=>Math.abs(p%W-u.goal%W)+Math.abs((p/W|0)-(u.goal/W|0));function push(p,k,parent){let id=k*C+p;if(seen.has(id))return;seen.set(id,parent);let a={p,k,id,f:k+h(p)+.001*h(p)},i=heap.length;heap.push(a);while(i){let j=(i-1)>>1;if(heap[j].f<=a.f)break;heap[i]=heap[j];i=j;heap[i]=a;}}function pop(){let a=heap[0],b=heap.pop();if(heap.length){let i=0;heap[0]=b;while(i*2+1<heap.length){let j=i*2+1;if(j+1<heap.length&&heap[j+1].f<heap[j].f)j++;if(heap[j].f>=b.f)break;heap[i]=heap[j];i=j;heap[i]=b;}}return a;}push(u.start,0,-1);let z=null;while(heap.length&&seen.size<150000){let a=pop();if(a.p===u.goal&&(last.get(a.p)||0)<=a.k){z=a;break;}if(a.k>=limit)continue;for(let d of [1,-1,W,-W,0]){let p=a.p+d,k=a.k+1;if(p<0||p>=C||blocked[p]||occ.has(p)||((d===1||d===-1)&&(p/W|0)!==(a.p/W|0))||res.has(k*C+p)||edge.has((k*C+p)*C+a.p)||(endAt.get(p)??Infinity)<=k)continue;push(p,k,a.id);}}if(!z){this.failures++;occ.add(u.start);u.path=[u.start];continue;}let path=[];for(let id=z.id;id>=0;id=seen.get(id))path.push(id%C);path.reverse();u.path=path;path.forEach((p,k)=>{res.add(k*C+p);last.set(p,Math.max(last.get(p)||0,k));if(k)edge.add((k*C+path[k-1])*C+p);});endAt.set(u.goal,path.length-1);}this.planMs=performance.now()-t;}
+step(){this.t+=this.dt;let q=this.t/this.tickDuration,k=Math.floor(q),f=q-k;this.grid.clear();for(let u of this.units){let p=u.path,a=p[Math.min(k,p.length-1)],b=p[Math.min(k+1,p.length-1)],ax=a%120,ay=a/120|0,bx=b%120,by=b/120|0;u.x=5+10*(ax+(bx-ax)*f);u.y=5+10*(ay+(by-ay)*f);if(a!==b)u.a=Math.atan2(by-ay,bx-ax);u.done=k>=p.length-1&&b===u.goal;this.add(u);}}
+audit(){return {...super.audit(),failures:this.failures,planMs:Math.round(this.planMs||0)}}}
+if(typeof module!=='undefined')module.exports=Mapf;else globalThis.Mapf=Mapf;
+
+const F16=typeof module!=='undefined'?require('./formation'):globalThis.Formation;
+class PIBT extends F16{
+constructor(n,opt={}){super(n,opt);
+const initStart=performance.now();this.W=120;this.C=9600;this.tickDuration=10/48;this.elapsed=0;this.planMs=0;this.maxMs=0;this.ticks=0;
+this.grid.clear();
+this.adj=Array.from({length:this.C},(_,p)=>{let x=p%120,y=p/120|0;return [p,x>0?p-1:-1,x<119?p+1:-1,y>0?p-120:-1,y<79?p+120:-1].filter(q=>q>=0&&!this.obstacles.some(o=>q%120*10+5>o.x-3&&q%120*10+5<o.x+o.w+3&&(q/120|0)*10+5>o.y-3&&(q/120|0)*10+5<o.y+o.h+3));});
+// Aircraft use a separate navigation layer: terrain walls and ground units do not block flight.
+this.airAdj=Array.from({length:this.C},(_,p)=>{let x=p%120,y=p/120|0;return [p,x>0?p-1:-1,x<119?p+1:-1,y>0?p-120:-1,y<79?p+120:-1].filter(q=>q>=0);});
+for(let side=0;side<2;side++){let group=this.groups[side],cols=Math.ceil(Math.sqrt(group.length)),rows=Math.ceil(group.length/cols),sx=Math.round((side?980:220)-(cols-1)*10/2),sy=Math.round(345-(rows-1)*10/2);group.forEach((u,j)=>{u.x=sx+(j%cols)*10;u.y=sy+Math.floor(j/cols)*10;u.p=(u.y/10|0)*120+(u.x/10|0);u.q=u.p;u.goal=(42+(j/cols|0))*120+(side?4:90)+j%cols;u.gx=u.goal%120*10+5;u.gy=(u.goal/120|0)*10+5;u.age=0;u.x=u.p%120*10+5;u.y=(u.p/120|0)*10+5;u.layer='ground';u.speed=24;u.moveAcc=1;this.add(u);});}
+for(let u of this.units)u.dist=this.distanceField(u.goal,'ground');
+this.decide();this.initMs=performance.now()-initStart;
+}
+adjacencyForLayer(layer){return layer==='air'?this.airAdj:this.adj;}
+adjFor(u){return this.adjacencyForLayer(u.layer);}
+distanceField(goal,layer='ground'){
+const adj=this.adjacencyForLayer(layer),d=new Int16Array(this.C);d.fill(30000);
+if(goal<0||goal>=this.C||!adj[goal].includes(goal))return d;
+const queue=new Int32Array(this.C);let head=0,tail=1;queue[0]=goal;d[goal]=0;
+while(head<tail){const p=queue[head++];for(const q of adj[p])if(d[q]===30000){d[q]=d[p]+1;queue[tail++]=q;}}
+return d;
+}
+configureUnits(){
+for(const u of this.units){const type=typeof TYPES!=='undefined'?TYPES[u.kind]:null;const layer=type&&type[5]==='air'?'air':'ground';const speed=type&&type[8]||24;
+if(u.layer!==layer||!u.dist)u.dist=this.distanceField(u.goal,layer);
+u.layer=layer;u.speed=speed;u.moveAcc=Math.min(2,u.moveAcc??1);
+}
+}
+decide(){let t=performance.now(),units=this.units,occ=new Int32Array(this.C*2).fill(-1),res=new Int32Array(this.C*2).fill(-1),next=new Int32Array(units.length).fill(-1);
+const offset=u=>u.layer==='air'?this.C:0;
+for(let u of units){if(u.dead)continue;occ[offset(u)+u.p]=u.id;u.age=u.p===u.goal?0:u.age+1;}
+let order=units.filter(u=>!u.dead).sort((a,b)=>b.age-a.age||a.id-b.id);
+const visit=(i,parent=-1)=>{let u=units[i],base=offset(u),adj=this.adjFor(u);let candidates=(u.moveAcc>=1?adj[u.p]:[u.p]).slice().sort((a,b)=>u.dist[a]-u.dist[b]||((a===u.p)-(b===u.p))||a-b);
+for(let p of candidates){let key=base+p;if(res[key]>=0||p===parent)continue;let j=occ[key];if(j>=0&&j!==i&&next[j]===u.p)continue;res[key]=i;next[i]=p;
+if(j>=0&&j!==i&&next[j]<0&&!visit(j,u.p)){res[key]=j;next[i]=-1;continue;}return true;}
+let key=base+u.p;if(res[key]<0)res[key]=i;next[i]=u.p;return false;};
+for(let u of order)if(next[u.id]<0)visit(u.id);
+let used=new Set();
+for(let u of units){if(u.dead)continue;let p=next[u.id],base=offset(u),key=base+p,j=occ[key];if(p<0||used.has(key)||(j>=0&&j!==u.id&&next[j]===u.p))throw Error('reservation invariant');used.add(key);u.q=p;if(p!==u.p)u.moveAcc=Math.max(0,u.moveAcc-1);}
+let ms=performance.now()-t;this.planMs+=ms;this.maxMs=Math.max(this.maxMs,ms);this.ticks++;
+}
+step(){this.t+=this.dt;this.elapsed+=this.dt;
+while(this.elapsed>=this.tickDuration){this.elapsed-=this.tickDuration;for(let u of this.units)if(!u.dead){u.p=u.q;u.moveAcc=Math.min(2,(u.moveAcc||0)+u.speed*this.tickDuration/10);}this.decide();}
+let f=this.elapsed/this.tickDuration;this.grid.clear();
+for(let u of this.units){if(u.dead)continue;let dx=u.q%120-u.p%120,dy=(u.q/120|0)-(u.p/120|0);u.x=5+10*(u.p%120+dx*f);u.y=5+10*((u.p/120|0)+dy*f);if(dx||dy)u.a=Math.atan2(dy,dx);u.done=u.p===u.goal&&u.q===u.goal;this.add(u);}
+}
+audit(){return {...super.audit(),initMs:Math.round(this.initMs),meanDecisionMs:this.ticks?this.planMs/this.ticks:0,maxDecisionMs:this.maxMs,ticks:this.ticks,airUnits:this.units.filter(u=>!u.dead&&u.layer==='air').length,groundUnits:this.units.filter(u=>!u.dead&&u.layer!=='air').length};}
+}
+if(typeof module!=='undefined')module.exports=PIBT;else globalThis.PIBT=PIBT;
+
+const TYPES=[
+['轻型坦克',220,25,90,85,'light','cannon',.8,18],
+['主战坦克',450,55,120,50,'medium','cannon',1.2,16],
+['重型坦克',800,85,110,30,'heavy','cannon',1.8,12],
+['反坦克导弹车',180,90,180,55,'light','missile',2.2,14],
+['机械化步兵',100,18,70,45,'infantry','small',.45,20],
+['自行火炮',200,110,260,25,'light','shell',3.5,11],
+['侦察车',130,12,80,110,'light','small',.5,28],
+['工程维修车',250,0,65,40,'light','repair',.5,16],
+['火箭炮',170,80,240,30,'light','shell',4,10],
+['武装直升机',240,65,150,85,'air','airgun',1.5,34],
+['防空导弹车',200,95,200,45,'light','aa',1.8,15],
+['无人侦察机',90,0,300,300,'air','scout',1,38],
+['电子战车',180,0,130,40,'light','jam',2,15],
+['后勤补给车',260,0,85,35,'light','supply',.5,17]
+];
+const MULT={cannon:[1.2,1,.75,.65],missile:[.8,1.5,2.3,.35],small:[1.3,.4,.15,1.5],shell:[1,.7,.45,1.8],repair:[0,0,0,0],airgun:[1.2,1,.9,.7,0],aa:[0,0,0,0,1.8],scout:[0,0,0,0,0],jam:[0,0,0,0,0],supply:[0,0,0,0,0]};
+const armor=['light','medium','heavy','infantry','air'];
+function damage(a,b){return TYPES[a][2]*(MULT[TYPES[a][6]][armor.indexOf(TYPES[b][5])]||0)}
+const P=typeof module!=='undefined'?require('./pibt'):globalThis.PIBT;
+class Battle extends P{constructor(n,opt={}){super(n,opt);
+this.effects=[];this.kills=[0,0];this.selected=new Set();this.pending=null;this.aiOrders=[];this.combatCell=56;this.combatGrid=new Map();this.combatChecks=0;this.combatQueries=0;
+this.units.forEach(u=>{u.kind=opt.types?.[u.side]??u.id%14;u.hp=TYPES[u.kind][1];u.cd=0;u.ammo=12;u.dead=false;u.visible=[false,false];});
+this.configureUnits();this.rebuildCombatIndex();
+}
+configureUnits(){super.configureUnits();}
+rebuildCombatIndex(){this.combatGrid=[new Map(),new Map()];for(const u of this.units){if(u.dead)continue;const grid=this.combatGrid[u.side],key=Math.floor(u.x/this.combatCell)+','+Math.floor(u.y/this.combatCell);if(!grid.has(key))grid.set(key,[]);grid.get(key).push(u);}}
+queryCombat(x,y,r,side){this.combatQueries++;const c=this.combatCell,r2=r*r,out=[],grid=this.combatGrid[side];const x0=Math.floor((x-r)/c),x1=Math.floor((x+r)/c),y0=Math.floor((y-r)/c),y1=Math.floor((y+r)/c);for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++){const list=grid.get(cx+','+cy);if(!list)continue;for(const u of list){this.combatChecks++;const dx=u.x-x,dy=u.y-y;if(dx*dx+dy*dy<=r2)out.push(u);}}return out;}
+decide(){if(!this.effects)return super.decide();
+const orders=[...(this.pending?[this.pending]:[]),...(this.aiOrders||[])];this.pending=null;this.aiOrders=[];for(const order of orders){let {ids,x,y,formation}=order,chosen=this.units.filter(u=>ids.has(u.id)&&!u.dead),used=new Set(this.units.filter(u=>!ids.has(u.id)&&!u.dead).map(u=>(u.layer==='air'?this.C:0)+u.goal));
+for(const [index,u] of chosen.entries()){let tx=x,ty=y;if(formation==='line')ty+=(index-(chosen.length-1)/2)*10;else if(formation==='column')tx+=(index-(chosen.length-1)/2)*10;let best=-1,score=Infinity,base=u.layer==='air'?this.C:0,adj=this.adjFor(u);
+for(let p=0;p<this.C;p++){if(used.has(base+p)||!adj[p].includes(p))continue;let d=(p%120*10+5-tx)**2+((p/120|0)*10+5-ty)**2;if(d<score){score=d;best=p;}}
+if(best<0)continue;used.add(base+best);u.goal=best;u.dist=this.distanceField(best,u.layer);u.moveAcc=1;
+}}
+super.decide();
+}
+step(){super.step();this.effects=this.effects.filter(e=>e.until>this.t);let live=this.units.filter(u=>!u.dead);this.rebuildCombatIndex();
+for(const v of live)v.visible=[false,false];
+for(const u of live){const vision=TYPES[u.kind][4];for(const v of this.queryCombat(u.x,u.y,vision,1-u.side))v.visible[u.side]=true;}
+let delta=new Map(),add=(u,v)=>delta.set(u,(delta.get(u)||0)+v);
+for(const u of live){u.cd-=this.dt;if(u.cd>0)continue;let t=TYPES[u.kind],w=t[6],repair=w==='repair',supply=w==='supply',jam=w==='jam',target=null,best=Infinity;if(w==='scout'||(!repair&&!supply&&!jam&&u.ammo<=0))continue;
+for(const v of this.queryCombat(u.x,u.y,t[3],repair||supply?u.side:1-u.side)){if(v===u||(repair?v.side!==u.side||v.hp>=TYPES[v.kind][1]:supply?v.side!==u.side||v.ammo>=12||TYPES[v.kind][2]===0:v.side===u.side||!v.visible[u.side]||(!jam&&!damage(u.kind,v.kind))))continue;let d=Math.hypot(v.x-u.x,v.y-u.y);if(d>t[3]||d>=best)continue;
+if(u.layer!=='air'&&!repair&&t[6]!=='shell'&&this.obstacles.some(o=>{for(let f=.05;f<1;f+=.05){let x=u.x+(v.x-u.x)*f,y=u.y+(v.y-u.y)*f;if(x>o.x&&x<o.x+o.w&&y>o.y&&y<o.y+o.h)return true;}return false;}))continue;
+target=v;best=d;
+}
+if(!target)continue;u.cd=t[7];if(repair)add(target,18);else if(supply)target.ammo=Math.min(12,target.ammo+3);else if(jam)target.cd=Math.max(target.cd,1.5);else{u.ammo--;add(target,-damage(u.kind,target.kind));if(t[6]==='shell')for(const v of this.queryCombat(target.x,target.y,28,1-u.side))if(v!==target)add(v,-damage(u.kind,v.kind)*.5);}
+this.effects.push({x:u.x,y:u.y,tx:target.x,ty:target.y,repair,until:this.t+.16});
+}
+for(const [u,d] of delta){u.hp=Math.min(TYPES[u.kind][1],u.hp+d);if(u.hp<=0){u.dead=true;this.remove(u);this.selected.delete(u.id);u.hp=0;this.kills[1-u.side]++;}}
+}
+audit(){return {...super.audit(),combatQueries:this.combatQueries,combatChecks:this.combatChecks,combatCell:this.combatCell};}
+}
+if(typeof module!=='undefined')module.exports={Battle,TYPES,damage};else Object.assign(globalThis,{Battle,TYPES,damage});
+
+const C19=typeof module==='undefined'?{Battle:globalThis.Battle,TYPES:globalThis.TYPES,damage:globalThis.damage}:require('./combat');
+const BUILD={mine:[180,240],barracks:[220,350],factory:[320,500],airfield:[450,400],lab:[350,300]};
+const COST=[100,180,300,170,60,220,80,120,240,300,160,90,150,110];
+const FAC=['factory','factory','factory','factory','barracks','factory','factory','factory','factory','airfield','factory','airfield','factory','factory'];
+const POINT_RATE=8, POINT_RADIUS=67;
+function makePoints(){return [
+ {id:'A',name:'西北补给站',x:365,y:225}, {id:'B',name:'西南油料库',x:365,y:550},
+ {id:'C',name:'中央通道',x:600,y:400}, {id:'D',name:'东北补给站',x:835,y:225},
+ {id:'E',name:'东南油料库',x:835,y:550}
+].map(p=>({...p,radius:POINT_RADIUS,owner:null,progress:0,contested:false,counts:[0,0]}));}
+class Strategy extends C19.Battle{
+constructor(n=24){super(n,{ratio:.5,width:240,seed:37});this.unitCap=1000;this.startingScale=n;this.cash=[650,650];this.tech=[0,0];this.buildings=[];this.queue=[];this.winner=null;this.ai=true;this.nextAI=3;this.points=makePoints();this.vp=[0,0];this.vpLimit=240;this.victoryReason=null;this.aiPlan=[];this.pointEvents=[];this.units.forEach(u=>{u.kind=u.id%14;u.hp=C19.TYPES[u.kind][1];u.goal=u.p;u.q=u.p;u.done=true;u.dist=this.distanceField(u.p,u.layer)});this.configureUnits();this.rebuildCombatIndex();for(let s=0;s<2;s++){this.buildings.push({side:s,type:'hq',x:s?1100:100,y:400,hp:1800,max:1800});this.place(s,'mine',false);this.place(s,'factory',false);} }
+place(s,type,pay=true){if(!BUILD[type]||this.winner!==null)return false;let count=this.buildings.filter(b=>b.side===s&&b.hp>0&&b.type!=='hq').length;if(count>=12||pay&&this.cash[s]<BUILD[type][0])return false;let slots=Array.from({length:12},(_,i)=>({x:s?1140-(i%3)*65:60+(i%3)*65,y:485+Math.floor(i/3)*70}));let p=slots.find(p=>!this.buildings.some(b=>b.hp>0&&b.x===p.x&&b.y===p.y));if(!p)return false;if(pay)this.cash[s]-=BUILD[type][0];this.buildings.push({side:s,type,...p,hp:BUILD[type][1],max:BUILD[type][1]});return true;}
+train(s,k){if(!Number.isInteger(k)||!FAC[k]||this.winner!==null||this.cash[s]<COST[k]||this.queue.filter(q=>q.side===s).length>=8||this.units.filter(u=>!u.dead).length+this.queue.length>=this.unitCap||([2,8,12].includes(k)&&!this.tech[s]))return false;let b=this.buildings.find(b=>b.side===s&&b.type===FAC[k]&&b.hp>0&&!this.queue.some(q=>q.b===b));if(!b)return false;this.cash[s]-=COST[k];this.queue.push({side:s,k,b,at:this.t+2+COST[k]/100});return true;}
+upgrade(s){if(this.tech[s]||this.cash[s]<300||!this.buildings.some(b=>b.side===s&&b.type==='lab'&&b.hp>0)||this.winner!==null)return false;this.cash[s]-=300;this.tech[s]=1;return true;}
+spawn(s,k,b){if(this.units.filter(u=>!u.dead).length>=this.unitCap)return false;const layer=TYPES[k][5]==='air'?'air':'ground',base=layer==='air'?this.C:0,adj=this.adjacencyForLayer(layer);let used=new Set(this.units.filter(u=>!u.dead).flatMap(u=>{let off=u.layer==='air'?this.C:0;return [off+u.p,off+u.q]}));let p=-1,best=Infinity;
+for(let i=0;i<this.C;i++){if(used.has(base+i)||!adj[i].includes(i))continue;let d=(i%120*10+5-b.x)**2+((i/120|0)*10+5-b.y)**2;if(d<best){best=d;p=i;}}
+if(p<0)return false;let goal=p,dist=this.distanceField(goal,layer),u={id:this.units.length,side:s,kind:k,layer,speed:TYPES[k][8],moveAcc:1,hp:C19.TYPES[k][1],cd:0,ammo:12,dead:false,p,q:p,goal,dist,age:0,x:p%120*10+5,y:(p/120|0)*10+5,a:0,visible:[false,false]};
+this.units.push(u);this.groups[s].push(u);this.add(u);this.rebuildCombatIndex();return true;
+}
+income(s){return 3+this.buildings.filter(b=>b.side===s&&b.type==='mine'&&b.hp>0).length*12+this.points.filter(p=>p.owner===s&&!p.contested).length*POINT_RATE;}
+updateTerritory(dt){
+ for(const p of this.points){
+   const count=[0,0];for(const u of this.units){if(!u.dead&&u.layer==='ground'&&(u.x-p.x)**2+(u.y-p.y)**2<=p.radius**2)count[u.side]++;}
+   p.counts=count;p.contested=count[0]>0&&count[1]>0;
+   if(!p.contested&&(count[0]||count[1])){
+     const side=count[0]?0:1, direction=side===0?-1:1;
+     const oldOwner=p.owner;
+     p.progress=Math.max(-1,Math.min(1,p.progress+direction*dt*Math.min(1.8,0.20+0.15*Math.min(10,count[side]))));
+     if(p.owner===0&&p.progress>=0||p.owner===1&&p.progress<=0)p.owner=null;
+     if(p.progress<=-1)p.owner=0;else if(p.progress>=1)p.owner=1;
+     if(oldOwner!==p.owner){this.pointEvents.push({t:this.t,id:p.id,from:oldOwner,to:p.owner});if(this.pointEvents.length>40)this.pointEvents.shift();}
+   }
+   if(p.owner!==null&&!p.contested)this.vp[p.owner]+=dt;
+ }
+}
+checkPointVictory(){if(this.vp[0]<this.vpLimit&&this.vp[1]<this.vpLimit)return false;this.winner=this.vp[0]===this.vp[1]?'draw':this.vp[0]>this.vp[1]?0:1;this.victoryReason='战略积分';return true;}
+planTerritoryAI(){
+ const active=this.units.filter(u=>!u.dead&&u.side===1);
+ const squads=[[],[],[]];active.forEach(u=>squads[u.id%3].push(u));
+ // Stable groups: flank garrisons retain their objectives; assault group pressures center first.
+ const tasks=[this.points[3],this.points[4],this.points[2]];
+ const secured=tasks.slice(0,2).every(p=>p.owner===1&&!p.contested);
+ if(secured&&this.points[2].owner===1&&!this.points[2].contested){
+   const hostile=this.points.slice(0,2).filter(p=>p.owner!==1);
+   if(hostile.length)tasks[2]=hostile.sort((a,b)=>Number(b.owner===0)-Number(a.owner===0)||a.id.localeCompare(b.id))[0];
+ }
+ this.aiPlan=[];
+ for(let i=0;i<squads.length;i++){
+   const point=tasks[i],group=squads[i];if(!group.length)continue;
+   const ids=new Set();for(const u of group){if(u.aiObjective!==point.id){ids.add(u.id);u.aiObjective=point.id;}}
+   // Orders issued only on changed objectives or new recruits; no overwrite of player order.
+   this.aiPlan.push({squad:i,point:point.id,units:group.length});
+   if(ids.size)this.aiOrders.push({ids,x:point.x,y:point.y,formation:'block',aiObjective:point.id});
+ }
+}
+step(){if(this.winner!==null)return;super.step();this.updateTerritory(this.dt);for(let s=0;s<2;s++)this.cash[s]+=this.dt*this.income(s);this.queue=this.queue.filter(q=>q.b.hp>0&&(q.at>this.t||!this.spawn(q.side,q.k,q.b)));for(let u of this.units){if(u.dead||u.cd>0||u.ammo<=0)continue;let t=C19.TYPES[u.kind];if(!C19.damage(u.kind,1))continue;let b=this.buildings.filter(b=>b.side!==u.side&&b.hp>0&&Math.hypot(b.x-u.x,b.y-u.y)<=t[3]&&(u.layer==='air'||!this.obstacles.some(o=>{for(let f=.05;f<1;f+=.05){let x=u.x+(b.x-u.x)*f,y=u.y+(b.y-u.y)*f;if(x>o.x&&x<o.x+o.w&&y>o.y&&y<o.y+o.h)return true}return false}))).sort((a,b)=>Math.hypot(a.x-u.x,a.y-u.y)-Math.hypot(b.x-u.x,b.y-u.y))[0];if(b){b.hp=Math.max(0,b.hp-C19.damage(u.kind,1));u.cd=t[7];u.ammo--;this.effects.push({x:u.x,y:u.y,tx:b.x,ty:b.y,until:this.t+.16})}}let dead=this.buildings.filter(b=>b.type==='hq'&&b.hp<=0);if(dead.length){this.winner=dead.length===2?'draw':1-dead[0].side;this.victoryReason='总部摧毁';return}if(this.checkPointVictory())return;if(this.ai&&this.t>=this.nextAI){this.nextAI+=5;let s=1,has=t=>this.buildings.some(b=>b.side===s&&b.type===t&&b.hp>0);if(!has('mine'))this.place(s,'mine');if(this.t>=10&&!has('barracks'))this.place(s,'barracks');if(this.t>=35&&!has('airfield'))this.place(s,'airfield');if(this.t>=50&&!has('lab'))this.place(s,'lab');let enemyAir=this.units.filter(u=>!u.dead&&u.side===0&&u.layer==='air').length,myAA=this.units.filter(u=>!u.dead&&u.side===1&&u.kind===10).length;if(enemyAir>myAA&&has('factory'))this.train(s,10);else if(has('airfield')&&this.t%20<5)this.train(s,9);else if(has('factory'))this.train(s,this.t%15<5?3:1);if(has('barracks'))this.train(s,4);if(has('lab')&&!this.tech[s]&&this.cash[s]>=300)this.upgrade(s);this.planTerritoryAI();}}
+}
+if(typeof module!=='undefined')module.exports={Strategy,BUILD,COST,FAC};else Object.assign(globalThis,{Strategy,BUILD,COST,FAC});
+
+let a,run=false;const $=id=>document.getElementById(id),c=$('c'),g=c.getContext('2d');let start=null, cursor=null, formation="block", groups=new Map();const colors=['#65d4b0','#e5a06b'];function draw(){g.fillStyle='#263e36';g.fillRect(0,0,1200,800);g.strokeStyle='#ffffff09';for(let i=0;i<1200;i+=40){g.beginPath();g.moveTo(i,0);g.lineTo(i,800);g.stroke()}for(let i=0;i<800;i+=40){g.beginPath();g.moveTo(0,i);g.lineTo(1200,i);g.stroke()}g.fillStyle='#52626a';for(const o of a.obstacles)g.fillRect(o.x,o.y,o.w,o.h);for(const u of a.units){if(u.dead||u.side&&u.visible&&!u.visible[0])continue;g.save();g.translate(u.x,u.y);g.rotate(u.a);g.fillStyle=colors[u.side];if(TYPES[u.kind][5]==='air'){g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.ellipse(0,7,5,2,0,0,Math.PI*2);g.fill();g.translate(0,-5);g.fillStyle=colors[u.side];g.beginPath();g.moveTo(7,0);g.lineTo(-5,-4);g.lineTo(-2,0);g.lineTo(-5,4);g.closePath();g.fill()}else g.fillRect(-4,-3,8,6);g.fillStyle='#18272b';g.fillRect(-1,-1,5,2);g.restore();if(a.units.length<=500){g.fillStyle=colors[u.side];g.fillRect(u.x-4,u.y-6,8*u.hp/TYPES[u.kind][1],1.5)}if(a.selected.has(u.id)){g.strokeStyle='white';g.strokeRect(u.x-6,u.y-6,12,12)}}for(const e of a.effects){g.strokeStyle=e.repair?'#68ff96':'#ffdb82';g.beginPath();g.moveTo(e.x,e.y);g.lineTo(e.tx,e.ty);g.stroke()}for(const b of a.buildings){if(b.hp<=0||b.side&&!visibleAt(b.x,b.y))continue;g.fillStyle=colors[b.side];g.fillRect(b.x-17,b.y-17,34,34);g.fillStyle='#10242b';g.fillRect(b.x-13,b.y-13,26,26);g.fillStyle='white';g.font='11px sans-serif';g.fillText(({hq:'HQ',mine:'矿',barracks:'兵',factory:'车',airfield:'空',lab:'科'})[b.type],b.x-9,b.y+4);g.fillStyle=colors[b.side];g.fillRect(b.x-17,b.y-22,34*b.hp/b.max,3)}fog();drawPoints();mini();drawTerritory();if(start&&cursor){g.strokeStyle='#b9f8d4';g.strokeRect(start[0],start[1],cursor[0]-start[0],cursor[1]-start[1])} $('economy').textContent='资源 '+Math.floor(a.cash[0])+' | 科技 '+a.tech[0]+' | 生产队列 '+a.queue.filter(q=>q.side===0).length+' | '+(a.winner===null?'交战中':a.winner===0?'胜利':a.winner===1?'失败':'平局');if(a.units.length<=500||++drawFrame%5===0||!cachedStats){const alive=a.units.filter(u=>!u.dead),selected=a.units.filter(u=>a.selected.has(u.id));cachedStats=JSON.stringify({time:a.t.toFixed(1),units:alive.length,alive:[0,1].map(s=>alive.filter(u=>u.side===s).length),air:alive.filter(u=>u.layer==='air').length,ground:alive.filter(u=>u.layer!=='air').length,kills:a.kills,selected:selected.length,selectedTypes:selected.slice(0,5).map(u=>({name:TYPES[u.kind][0],layer:u.layer,speed:u.speed+' px/s'})),overlaps:a.audit().overlaps,combatChecks:a.combatChecks},null,2)}$('stats').textContent=cachedStats}function reset(){lastTerritory='';$('pointlist').replaceChildren();simBudget=0;run=false;fogFrame=0;miniFrame=0;drawFrame=0;cachedStats='';a=new Strategy(Number($('scale').value));groups.clear();run=false;draw()}$('reset').onclick=reset;$('play').onclick=()=>run=!run;$('step').onclick=()=>{a.step();draw()};function point(e){let r=c.getBoundingClientRect();return [(e.clientX-r.left)*1200/r.width,(e.clientY-r.top)*800/r.height]}c.onpointerdown=e=>{if(e.button===0){start=point(e);cursor=start;c.setPointerCapture(e.pointerId)}};c.onpointerup=e=>{if(!start)return;let [x,y]=point(e),[sx,sy]=start;start=null;if(Math.hypot(x-sx,y-sy)<8){let hit=a.units.filter(u=>!u.dead&&!u.side&&Math.hypot(u.x-x,u.y-y)<=8).sort((u,v)=>Math.hypot(u.x-x,u.y-y)-Math.hypot(v.x-x,v.y-y))[0];if(hit){a.selected=new Set([hit.id]);draw();return}if(a.selected.size){a.pending={ids:new Set(a.selected),x,y,formation};draw();return}}a.selected=new Set(a.units.filter(u=>!u.dead&&!u.side&&u.x>=Math.min(x,sx)-5&&u.x<=Math.max(x,sx)+5&&u.y>=Math.min(y,sy)-5&&u.y<=Math.max(y,sy)+5).map(u=>u.id));draw()};c.onpointermove=e=>{if(start){cursor=point(e);draw()}};c.onpointercancel=()=>{start=null};c.oncontextmenu=e=>{e.preventDefault();let [x,y]=point(e);if(a.selected.size)a.pending={ids:new Set(a.selected),x,y,formation};draw()};let lastFrame=null,simBudget=0;function loop(now=performance.now()){const elapsed=lastFrame===null?0:Math.min(.1,Math.max(0,(now-lastFrame)/1000));lastFrame=now;if(run){simBudget=Math.min(.3,simBudget+elapsed*Number($('speed').value));let steps=0,cap=a.units.length>=1000?2:a.units.length>=500?4:8;while(simBudget>=a.dt&&steps<cap&&a.winner===null){a.step();simBudget-=a.dt;steps++;}if(a.winner!==null)run=false;draw()}else simBudget=0;requestAnimationFrame(loop)}const orders=$('orders');function btn(label,fn,parent=orders){let b=document.createElement('button');b.textContent=label;b.onclick=()=>{if(!fn())$('notice').textContent='条件不足：检查资源、建筑、科技或生产队列';else $('notice').textContent='指令已接受';draw()};parent.append(b)}let notice=document.createElement('span');notice.id='notice';orders.append(notice);for(const [k,v] of Object.entries(BUILD))btn(({mine:'资源站',barracks:'兵营',factory:'战车工厂',airfield:'空军基地',lab:'科技中心'})[k]+' '+v[0],()=>a.place(0,k));btn('升级科技 300',()=>a.upgrade(0));for(let k=0;k<TYPES.length;k++)btn(TYPES[k][0]+' '+COST[k],()=>a.train(0,k),$('troops'));function visibleAt(x,y){return a.units.some(u=>!u.dead&&!u.side&&Math.hypot(u.x-x,u.y-y)<TYPES[u.kind][4])||a.buildings.some(b=>!b.side&&b.hp>0&&Math.hypot(b.x-x,b.y-y)<120)}
+let fogFrame=0,miniFrame=0,drawFrame=0,cachedStats='';const mask=document.createElement('canvas');mask.width=1200;mask.height=800;const mg=mask.getContext('2d');function fog(){if(a.units.length>500&&fogFrame++%3!==0){g.drawImage(mask,0,0);return}mg.globalCompositeOperation='source-over';mg.clearRect(0,0,1200,800);mg.fillStyle='rgba(7,15,17,.72)';mg.fillRect(0,0,1200,800);mg.globalCompositeOperation='destination-out';for(const u of [...a.units.filter(u=>!u.dead&&!u.side),...a.buildings.filter(b=>!b.side&&b.hp>0)]){mg.beginPath();mg.arc(u.x,u.y,u.kind===undefined?120:TYPES[u.kind][4],0,Math.PI*2);mg.fill()}g.drawImage(mask,0,0)}
+const pointColor=p=>p.contested?'#e9d17c':p.owner===null?'#a6b4ad':colors[p.owner];
+function drawPoints(){for(const p of a.points){const color=pointColor(p);g.save();g.strokeStyle=color;g.fillStyle=color;g.globalAlpha=.08;g.beginPath();g.arc(p.x,p.y,p.radius,0,Math.PI*2);g.fill();g.globalAlpha=.8;g.lineWidth=2;g.setLineDash(p.contested?[7,5]:[3,6]);g.stroke();g.setLineDash([]);g.fillStyle='#142521';g.beginPath();g.arc(p.x,p.y,13,0,Math.PI*2);g.fill();g.strokeStyle=color;g.stroke();g.textAlign='center';g.textBaseline='middle';g.font='bold 14px system-ui';g.fillStyle=color;g.fillText(p.id,p.x,p.y);g.fillStyle='#0b1816';g.fillRect(p.x-28,p.y+20,56,5);g.fillStyle=colors[p.progress<0?0:1];g.fillRect(p.x-28,p.y+20,56*Math.abs(p.progress),5);g.restore();}}
+let lastTerritory='';function drawTerritory(){const snapshot=JSON.stringify([a.vp.map(Math.floor),a.points.map(p=>[p.owner,p.contested,Math.round(Math.abs(p.progress)*100),p.progress<0]),a.winner,Math.floor(a.income(0))]);if(snapshot===lastTerritory)return;lastTerritory=snapshot;
+ $('territory').innerHTML=[0,1].map(s=>`<div class="score"><small>${s?'敌军':'友军'} · 胜利积分</small><div><b style="color:${colors[s]}">${Math.min(a.vpLimit,Math.floor(a.vp[s]))}</b> / ${a.vpLimit}</div><div class="score-track"><i style="width:${Math.min(100,100*a.vp[s]/a.vpLimit)}%;background:${colors[s]}"></i></div></div>`).join('')+`<div><small>友军收入 / 秒</small><div><b>+${a.income(0)}</b></div><span id="result">${a.winner===null?'':(a.winner==='draw'?'平局':a.winner===0?'胜利':'失败')+' · '+a.victoryReason}</span></div>`;
+ const list=$('pointlist');for(const p of a.points){let row=list.querySelector(`[data-point="${p.id}"]`);if(!row){row=document.createElement('div');row.className='point-row';row.dataset.point=p.id;row.innerHTML='<b></b><button>调遣</button><small></small>';row.querySelector('button').onclick=()=>{if(a.selected.size){a.pending={ids:new Set(a.selected),x:p.x,y:p.y,formation:'block'};$('notice').textContent='已下令前往 '+p.id;}else $('notice').textContent='请先选择友军单位';};list.append(row);}row.querySelector('b').textContent=p.id+' · '+p.name;row.querySelector('b').style.color=pointColor(p);row.querySelector('small').textContent=(p.contested?'争夺中 · 停止收益':p.owner===null?'中立':p.owner===0?'友军控制':'敌军控制')+' · '+(p.progress===0?'未占领':(p.progress<0?'友军 ':'敌军 ')+Math.round(Math.abs(p.progress)*100)+'%');}}
+function mini(){if(a.units.length>500&&miniFrame++%2!==0)return;const m=$('mini').getContext('2d');m.fillStyle='#132720';m.fillRect(0,0,240,160);m.fillStyle='#65766b';for(const o of a.obstacles)m.fillRect(o.x/5,o.y/5,o.w/5,o.h/5);for(const u of [...a.units,...a.buildings]){if(u.dead||u.hp<=0||u.side&&!visibleAt(u.x,u.y))continue;m.fillStyle=colors[u.side];m.fillRect(u.x/5,u.y/5,u.type?5:2,u.type?5:2)}for(const p of a.points){m.strokeStyle=pointColor(p);m.lineWidth=2;m.strokeRect(p.x/5-4,p.y/5-4,8,8)}}
+$('formation').onchange=e=>formation=e.target.value;document.addEventListener('keydown',e=>{if(e.target.tagName==='SELECT')return;if(e.code==='Space'){e.preventDefault();run=!run}if(/^Digit[1-9]$/.test(e.code)){let k=e.code.slice(-1);if(e.ctrlKey){e.preventDefault();groups.set(k,new Set(a.selected))}else if(groups.has(k))a.selected=new Set(a.units.filter(u=>!u.dead&&groups.get(k).has(u.id)).map(u=>u.id))}if(e.key==='Escape')a.selected.clear();draw()});
+reset();loop();</script></html>

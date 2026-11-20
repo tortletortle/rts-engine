@@ -1,0 +1,1 @@
+{"name":"steel-front-rts","version":"2.2.0","private":true,"description":"Standalone Canvas RTS prototype with territorial control","scripts":{"test":"node tests/test_v21.cjs && node tests/test_v22.cjs","test:long":"node tests/long_battle.cjs","test:browser":"python tests/browser_v22.py"}}
